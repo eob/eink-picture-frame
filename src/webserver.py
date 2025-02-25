@@ -74,7 +74,7 @@ def download_file():
     deleteImage()
 
     # Get the path of the directory above me
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
     # Load the file settings.json from that path
     json_file = open(os.path.join(path, "config/api.json"))
