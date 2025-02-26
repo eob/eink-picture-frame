@@ -10,6 +10,8 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+source env/bin/activate
+
 if [ "$currentFolder" == "scripts" ]; then
   cd ..
   currentDir=$(pwd)
