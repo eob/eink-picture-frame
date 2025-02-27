@@ -106,7 +106,7 @@ def download_file():
     with open(save_filename, "wb") as image_file:
         image_file.write(image_response.content)
 
-    updateEink(filename,ORIENTATION,ADJUST_AR)
+    updateEink(save_filename,ORIENTATION,ADJUST_AR)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -304,7 +304,9 @@ def uploaded_file(filename):
 
 #run button checks on gpio    
 for pin in BUTTONS:
-        GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+    print(f"Trying to add event detect for pin {pin}")
+    GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+
 if __name__ == '__main__':
     app.secret_key = str(random.randint(100000,999999))
     app.run(host="0.0.0.0",port=80)

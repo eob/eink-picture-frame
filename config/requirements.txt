@@ -46,3 +46,4 @@ urllib3==1.26.5
 v4l2-python3==0.3.2
 werkzeug==3.0.2
 zipp==3.18.1
+requests
