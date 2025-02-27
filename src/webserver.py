@@ -77,12 +77,16 @@ def download_file():
     # Get the path of the directory above me
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
+    print(f"Looking for api config in {path}")
+
     # Load the file settings.json from that path
     json_file = open(os.path.join(path, "config/api.json"))
 
     # Load the json data from the file
     settings_data = json.load(json_file)
 
+    print(settings_data)
+    
     # Get the frame value from settings_data
     frame = settings_data.get("frame")
 
