@@ -106,7 +106,8 @@ def download_file():
     with open(save_filename, "wb") as image_file:
         image_file.write(image_response.content)
 
-    updateEink(save_filename,ORIENTATION,ADJUST_AR)
+    print(f"Saved to {save_filename}")
+    updateEink(save_filename, ORIENTATION, ADJUST_AR)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -301,6 +302,7 @@ def rotateImage(deg):
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'],filename)
 
+download_file()
 
 #run button checks on gpio    
 for pin in BUTTONS:
