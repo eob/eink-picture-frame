@@ -9,6 +9,7 @@ import json
 from inky.auto import auto
 import RPi.GPIO as GPIO
 from PIL import ImageDraw,Image 
+import requests
 import generateInfo
 # Gpio button pins from top to bottom
 
