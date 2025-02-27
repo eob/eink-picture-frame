@@ -84,16 +84,17 @@ def download_file():
 
     # Load the json data from the file
     settings_data = json.load(json_file)
-
-    print(settings_data)
     
     # Get the frame value from settings_data
     frame = settings_data.get("frame")
+    print(f"Frame: {frame}")
 
     # Get the base_url value
     base_url = settings_data.get("base_url")
+    print(f"Base URL: {base_url}")
 
     index_url = f"{base_url}/{frame}/index.json"
+    print(f"Index URL: {index_url}")
 
     # Fetch the JSON file at index_url
     response = requests.get(index_url)
@@ -101,7 +102,8 @@ def download_file():
 
     # Get the url value from index_json
     image_url = index_json.get("url")
-
+    print(f"Image URL: {image_url}")
+    
     # Fetch the image at image_url
     image_response = requests.get(image_url)
     
