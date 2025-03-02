@@ -136,8 +136,8 @@ enable_interfaces
 print_header  "Installing the Pimoroni Inky libraries."
 sudo python -m venv env
 source env/bin/activate
-pip3 install inky[rpi,example-depends] > /dev/null &
-pip3 install inky > /dev/null &
+pip3 install inky[rpi,example-depends]===1.5.0 > /dev/null &
+pip3 install inky==1.5.0 > /dev/null &
 show_loader "   Installing packages...    "
 #curl https://get.pimoroni.com/inky | bash
 
@@ -168,6 +168,8 @@ print_success "Bonjour set up!\n"
 # Create the log file
 touch "$currentWorkingDir/piink-log.txt"
 
+chmod a+x $currentWorkingDir/bootup-run.sh
+
 # Update rc.local
 print_bold "Updating rc.local"
 
@@ -175,14 +177,14 @@ if [ ! -f /etc/rc.local ]; then
   # Create the file with the required content
   cat <<EOF | sudo tee /etc/rc.local
 #!/bin/bash
-cd $currentWorkingDir && sudo bash $currentWorkingDir/scripts/start.sh > $currentWorkingDir/piink-log.txt 2>&1 &
+cd $currentWorkingDir && ./bootup-run.sh &
 exit 0
 EOF
   sudo chmod +x /etc/rc.local
   print_success "Created /etc/rc.local with startup line!"
 else
   if grep -Fxq "exit 0" /etc/rc.local; then
-    sudo sed -i "/exit 0/i cd $currentWorkingDir && sudo bash $currentWorkingDir/scripts/start.sh > $currentWorkingDir/piink-log.txt 2>&1 &" /etc/rc.local
+    sudo sed -i "/exit 0/i cd $currentWorkingDir && ./bootup-run.sh &" /etc/rc.local
     print_success "Added startup line to rc.local!"
   else
     print_error "ERROR: Unable to add to rc.local"
