@@ -13,16 +13,31 @@ import requests
 import generateInfo
 import log
 import time
-
+import gpiod
+import gpiodevice
+from gpiod.line import Bias, Direction, Edge
+import threading
 
 # Gpio button pins from top to bottom
 
-#5 == info
-#6 == rotate clockwise
-#16 == rotate counterclockwise
-#24 == reboot
-
+# GPIO pins for each button (from top to bottom)
+# These will vary depending on platform and the ones
+# below should be correct for Raspberry Pi 5.
+# Run "gpioinfo" to find out what yours might be.
+#
+# Raspberry Pi 5 Header pins used by Inky Impression:
+#    PIN29, PIN31, PIN36, PIN18.
+# These header pins correspond to BCM GPIO numbers:
+#    GPIO05, GPIO06, GPIO16, GPIO24.
+# These GPIO numbers are what is used below and not the
+# header pin numbers.
 BUTTONS = [5, 6, 16, 24]
+
+# These correspond to buttons A, B, C and D respectively
+LABELS = ["A", "B", "C", "D"]
+
+ROLES = ["Refresh Picture", "Rotate Clockwise", "Rotate Counterclockwise", "Reboot Picture Frame"]
+
 ORIENTATION = 0
 ADJUST_AR = False
 
@@ -39,9 +54,6 @@ pathExist = os.path.exists(os.path.join(PATH, "img"))
 if(pathExist == False):
    os.makedirs(os.path.join(PATH, "img"))
 
-#setup eink display and border
-inky_display = auto(ask_user=True, verbose=True)
-inky_display.set_border(inky_display.BLACK)
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -325,33 +337,86 @@ def rotateImage(deg):
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'],filename)
 
-
-# ALWAYS CHECK OUR NEW IMAGE
-# ----------------------------------------------------------------------------
-
-log.info("Upon webserver startup, downloading image.")
-# download_file()
-
 # INITIALIZE THE BUTTONS
 # ----------------------------------------------------------------------------
+
+
+log.info("[Init] GPIO")
+
+# Create settings for all the input pins, we want them to be inputs
+# with a pull-up and a falling edge detection.
+INPUT = gpiod.LineSettings(
+    direction=Direction.INPUT,
+    bias=Bias.PULL_UP,
+    edge_detection=Edge.FALLING
+)
+
+
+# Find the gpiochip device we need, we'll use
+# gpiodevice for this, since it knows the right device
+# for its supported platforms.
+chip = gpiodevice.find_chip_by_platform()
+
+# Build our config for each pin/line we want to use
+OFFSETS = [chip.line_offset_from_id(id) for id in BUTTONS]
+line_config = dict.fromkeys(OFFSETS, INPUT)
+
+# Request the lines, *whew*
+line_request = chip.request_lines(consumer="inky7-buttons", config=line_config)
+
+
+# "handle_button" will be called every time a button is pressed
+# It receives one argument: the associated gpiod event object.
+def handle_button(event):
+    index = OFFSETS.index(event.line_offset)
+    gpio_number = BUTTONS[index]
+    label = LABELS[index]
+    print(f"Button press detected on GPIO #{gpio_number} label: {label}")
+
+
+# Function to run the button monitoring loop in a separate thread
+def button_monitoring_loop():
+    log.info("[Init] Inside monitoring loop")
+    while True:
+        for event in line_request.read_edge_events():
+            handle_button(event)
+        time.sleep(0.01)  # Small sleep to reduce CPU usage
+
 
 if __name__ == '__main__':
     try:
         log.info("Upon webserver startup, initialize buttons.")
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(BUTTONS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        time.sleep(0.2)
+        # GPIO.setmode(GPIO.BCM)
+        # GPIO.setup(BUTTONS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        # time.sleep(0.2)
 
-        for pin in BUTTONS:
-            print(f"Trying to add event detect for pin {pin}")
-            GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
-            time.sleep(0.1)
+        # for pin in BUTTONS:
+        #     print(f"Trying to add event detect for pin {pin}")
+        #     GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+        #     time.sleep(0.1)
 
+        log.info("[Init] Inky")
+        inky_display = auto(ask_user=True, verbose=True)
+
+        log.info("[Config] Inky Border")
+        inky_display.set_border(inky_display.BLACK)
+
+        # Start the button monitoring loop in a separate thread
+        log.info("[Init] Button monitoring loop.")
+        button_thread = threading.Thread(target=button_monitoring_loop)
+        # Allow main thread to exit even if button thread is running
+        button_thread.daemon = True
+        button_thread.start()
+
+        # log.info("[Init] Downloading image.")
+        # download_file()
+
+        # Start the flask app
+        log.info("[Init] Flask app.")
         app.secret_key = str(random.randint(100000, 999999))
-
         app.run(host="0.0.0.0", port=80)
     except Exception as e:
         log.exception(e)
-    finally:
-        GPIO.cleanup()
-        log.info("GPIO cleanup complete.")
+    # finally:
+    #     GPIO.cleanup()
+    #     log.info("GPIO cleanup complete.")
