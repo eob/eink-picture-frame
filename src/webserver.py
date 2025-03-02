@@ -330,7 +330,7 @@ def uploaded_file(filename):
 # ----------------------------------------------------------------------------
 
 log.info("Upon webserver startup, downloading image.")
-download_file()
+# download_file()
 
 # INITIALIZE THE BUTTONS
 # ----------------------------------------------------------------------------
