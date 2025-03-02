@@ -408,8 +408,8 @@ if __name__ == '__main__':
         button_thread.daemon = True
         button_thread.start()
 
-        # log.info("[Init] Downloading image.")
-        # download_file()
+        log.info("[Init] Downloading image.")
+        download_file()
 
         # Start the flask app
         log.info("[Init] Flask app.")
