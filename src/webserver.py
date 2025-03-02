@@ -14,6 +14,7 @@ import generateInfo
 import log
 import time
 
+
 # Gpio button pins from top to bottom
 
 #5 == info
@@ -224,7 +225,9 @@ def loadSettings():
         verticalOrient = "checked"
         horizontalOrient = ""
     return settingsData.get("adjust_aspect_ratio"),horizontalOrient,verticalOrient
-def saveSettings(orientationHorizontal,orientationVertical,adjustAR):
+
+
+def saveSettings(orientationHorizontal, orientationVertical, adjustAR):
     if orientationHorizontal == "checked":
         orientationSetting = "Horizontal"
     else:
@@ -236,29 +239,36 @@ def saveSettings(orientationHorizontal,orientationVertical,adjustAR):
     with open(os.path.join(PATH,"config/settings.json"), "w") as f:
         json.dump(jsonStr, f)
 
-def updateEink(filename,orientation,adjustAR):
-    with Image.open(os.path.join(PATH, "img/",filename)) as img:
 
-        #do image transforms 
-        img = changeOrientation(img,orientation)
-        img = adjustAspectRatio(img,adjustAR)    
+def updateEink(filename, orientation, adjustAR):
+    log.info(f"[Command] Update Image - Orientation={orientation}, AdjustAR={adjustAR}")
+    with Image.open(os.path.join(PATH, "img/", filename)) as img:
+        # do image transforms
+        img = changeOrientation(img, orientation)
+        img = adjustAspectRatio(img, adjustAR)
 
         # Display the image
+        log.info("[Display] Set Image")
         inky_display.set_image(img)
+        time.sleep(0.2)
+        log.info("[Display] Show Image")
         inky_display.show()
+
 
 #clear the screen to prevent ghosting
 def clearScreen():
-    print("running ghost clear")
-    img = Image.new(mode="RGB", size=(inky_display.width, inky_display.height),color=(255,255,255))
-    clearImage = ImageDraw.Draw(img)
+    print("[Command] Clear Screen")
+    img = Image.new(mode="RGB", size=(inky_display.width, inky_display.height), color=(
+        255,
+        255,
+        255
+    ))
     inky_display.set_image(img)
     inky_display.show()
     updateEink(os.listdir(app.config['UPLOAD_FOLDER'])[0],ORIENTATION,ADJUST_AR)
 
 
-
-def changeOrientation(img,orientation):
+def changeOrientation(img, orientation):
     # 0 = horizontal
     # 1 = portrait
     if orientation == 0:
@@ -267,7 +277,8 @@ def changeOrientation(img,orientation):
         img = img.rotate(90)
     return img
 
-def adjustAspectRatio(img,adjustARBool):
+
+def adjustAspectRatio(img, adjustARBool):
     if adjustARBool:
         w = inky_display.width
         h = inky_display.height
@@ -339,6 +350,8 @@ if __name__ == '__main__':
         app.secret_key = str(random.randint(100000, 999999))
 
         app.run(host="0.0.0.0", port=80)
+    except Exception as e:
+        log.exception(e)
     finally:
         GPIO.cleanup()
         log.info("GPIO cleanup complete.")
