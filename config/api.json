@@ -1,4 +1,8 @@
 {
+<<<<<<< HEAD
   "frame": "000-000-000",
+=======
+  "frame": "0",
+>>>>>>> cae7a853372e43ea8f7b99fade85676a71037e89
   "base_url": "https://storage.googleapis.com/eastreader_public_uploads/frames"
 }

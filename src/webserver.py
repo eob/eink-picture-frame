@@ -8,95 +8,117 @@ from PIL import Image
 import json
 from inky.auto import auto
 import RPi.GPIO as GPIO
-from PIL import ImageDraw,Image 
+from PIL import ImageDraw, Image 
+import requests
 import generateInfo
+import log
+import time
+import gpiod
+import gpiodevice
+from gpiod.line import Bias, Direction, Edge
+import threading
+
 # Gpio button pins from top to bottom
 
-#5 == info
-#6 == rotate clockwise
-#16 == rotate counterclockwise
-#24 == reboot
-
+# GPIO pins for each button (from top to bottom)
+# These will vary depending on platform and the ones
+# below should be correct for Raspberry Pi 5.
+# Run "gpioinfo" to find out what yours might be.
+#
+# Raspberry Pi 5 Header pins used by Inky Impression:
+#    PIN29, PIN31, PIN36, PIN18.
+# These header pins correspond to BCM GPIO numbers:
+#    GPIO05, GPIO06, GPIO16, GPIO24.
+# These GPIO numbers are what is used below and not the
+# header pin numbers.
 BUTTONS = [5, 6, 16, 24]
+
+# These correspond to buttons A, B, C and D respectively
+LABELS = ["A", "B", "C", "D"]
+
+ROLES = ["Refresh Picture", "Rotate Clockwise", "Rotate Counterclockwise", "Reboot Picture Frame"]
+
 ORIENTATION = 0
 ADJUST_AR = False
 
-#Set up RPi.GPIO
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(BUTTONS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
 # Get the current path
 PATH = os.path.dirname(os.path.dirname(__file__))
-print(PATH)
-UPLOAD_FOLDER = os.path.join(PATH,"img")
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg','webp'}
-print(ALLOWED_EXTENSIONS)
+log.info(f"Webserver path: {PATH}")
+UPLOAD_FOLDER = os.path.join(PATH, "img")
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+log.info(f"Allowed extensions: {ALLOWED_EXTENSIONS}")
 
 # Check whether the specified path exists or not
-pathExist = os.path.exists(os.path.join(PATH,"img"))
+pathExist = os.path.exists(os.path.join(PATH, "img"))
 
 if(pathExist == False):
-   os.makedirs(os.path.join(PATH,"img"))
+   os.makedirs(os.path.join(PATH, "img"))
 
-#setup eink display and border
-inky_display = auto(ask_user=True, verbose=True)
-inky_display.set_border(inky_display.BLACK)
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+
+# Get the path of the directory above me
+path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+log.info(f"Looking for API Config in path: {path}")
+
+# Load the file settings.json from that path
+json_file = open(os.path.join(path, "config/api.json"))
+
+# Load the json data from the file
+settings_data = json.load(json_file)
+
+# Get the frame value from settings_data
+FRAME = settings_data.get("frame")
+log.info(f"Frame #: {FRAME}")
+
+# Get the base_url value
+BASE_URL = settings_data.get("base_url")
+log.info(f"API Base URL: {BASE_URL}")
+
+INDEX_URL = f"{BASE_URL}/{FRAME}/index.json"
+log.info(f"API Index URL: {INDEX_URL}")
 
 #handles button presses
 def handleButton(pin):
     #top button
     if(pin == 5):
+        log.info("A Button Pressed - Update Image")
         download_file()
         # print("--A-- Pressed: Show PiInk info")
         # generateInfo.infoGen(inky_display.width,inky_display.height)
         # #update the eink display
         # updateEink("infoImage.png",0,"")
     elif(pin == 6):
-        print("--B-- Pressed: Rotate image clockwise")
+        log.info("B Button Pressed - Rotate Clockwise")
+        # print("--B-- Pressed: Rotate image clockwise")
         rotateImage(-90)
     elif(pin == 16):
-        print("--C-- Pressed: Rotate image counter clockwise")
+        log.info("C Button Pressed - Rotate Image Counterclockwise")
+        # print("--C-- Pressed: Rotate image counter clockwise")
         rotateImage(90)
     elif(pin == 24):
-        print("--D-- Pressed: Reboot the Pi")
+        log.info("D Button Pressed - Reboot Picture Frame")
+        # print("--D-- Pressed: Reboot the Pi")
         os.system('sudo reboot')  
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-
-
 def download_file():
     deleteImage()
 
-    # Get the path of the directory above me
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-
-    # Load the file settings.json from that path
-    json_file = open(os.path.join(path, "config/api.json"))
-
-    # Load the json data from the file
-    settings_data = json.load(json_file)
-
-    # Get the frame value from settings_data
-    frame = settings_data.get("frame")
-
-    # Get the base_url value
-    base_url = settings_data.get("base_url")
-
-    index_url = f"{base_url}/{frame}/index.json"
-
     # Fetch the JSON file at index_url
-    response = requests.get(index_url)
+    response = requests.get(INDEX_URL)
     index_json = response.json()
 
     # Get the url value from index_json
     image_url = index_json.get("url")
-
+    log.info(f"Image URL: {image_url}")
+    
     # Fetch the image at image_url
     image_response = requests.get(image_url)
     
@@ -106,7 +128,8 @@ def download_file():
     with open(save_filename, "wb") as image_file:
         image_file.write(image_response.content)
 
-    updateEink(filename,ORIENTATION,ADJUST_AR)
+    print(f"Saved to {save_filename}")
+    updateEink(save_filename, ORIENTATION, ADJUST_AR)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -114,7 +137,7 @@ def upload_file():
     print("req ",request.files)    
     ADJUST_AR = False
 
-    arSwitchCheck,horizontalOrientationRadioCheck,verticalOrientationRadioCheck = loadSettings()
+    arSwitchCheck, horizontalOrientationRadioCheck, verticalOrientationRadioCheck = loadSettings()
 
     if horizontalOrientationRadioCheck == "checked":
         ORIENTATION = 0
@@ -214,7 +237,9 @@ def loadSettings():
         verticalOrient = "checked"
         horizontalOrient = ""
     return settingsData.get("adjust_aspect_ratio"),horizontalOrient,verticalOrient
-def saveSettings(orientationHorizontal,orientationVertical,adjustAR):
+
+
+def saveSettings(orientationHorizontal, orientationVertical, adjustAR):
     if orientationHorizontal == "checked":
         orientationSetting = "Horizontal"
     else:
@@ -226,29 +251,36 @@ def saveSettings(orientationHorizontal,orientationVertical,adjustAR):
     with open(os.path.join(PATH,"config/settings.json"), "w") as f:
         json.dump(jsonStr, f)
 
-def updateEink(filename,orientation,adjustAR):
-    with Image.open(os.path.join(PATH, "img/",filename)) as img:
 
-        #do image transforms 
-        img = changeOrientation(img,orientation)
-        img = adjustAspectRatio(img,adjustAR)    
+def updateEink(filename, orientation, adjustAR):
+    log.info(f"[Command] Update Image - Orientation={orientation}, AdjustAR={adjustAR}")
+    with Image.open(os.path.join(PATH, "img/", filename)) as img:
+        # do image transforms
+        img = changeOrientation(img, orientation)
+        img = adjustAspectRatio(img, adjustAR)
 
         # Display the image
+        log.info("[Display] Set Image")
         inky_display.set_image(img)
+        time.sleep(0.2)
+        log.info("[Display] Show Image")
         inky_display.show()
+
 
 #clear the screen to prevent ghosting
 def clearScreen():
-    print("running ghost clear")
-    img = Image.new(mode="RGB", size=(inky_display.width, inky_display.height),color=(255,255,255))
-    clearImage = ImageDraw.Draw(img)
+    print("[Command] Clear Screen")
+    img = Image.new(mode="RGB", size=(inky_display.width, inky_display.height), color=(
+        255,
+        255,
+        255
+    ))
     inky_display.set_image(img)
     inky_display.show()
     updateEink(os.listdir(app.config['UPLOAD_FOLDER'])[0],ORIENTATION,ADJUST_AR)
 
 
-
-def changeOrientation(img,orientation):
+def changeOrientation(img, orientation):
     # 0 = horizontal
     # 1 = portrait
     if orientation == 0:
@@ -257,7 +289,8 @@ def changeOrientation(img,orientation):
         img = img.rotate(90)
     return img
 
-def adjustAspectRatio(img,adjustARBool):
+
+def adjustAspectRatio(img, adjustARBool):
     if adjustARBool:
         w = inky_display.width
         h = inky_display.height
@@ -282,29 +315,108 @@ def adjustAspectRatio(img,adjustARBool):
         img = img.resize(inky_display.resolution)
     return img
 
+
 def deleteImage():
     img_directory = os.path.join(PATH, "img")
+    log.info(f"Deleting Images in path: {img_directory}")
     for filename in os.listdir(img_directory):
         fp = os.path.join(img_directory, filename)
         if os.path.isfile(fp):
             os.remove(fp)
             
-def rotateImage(deg):
-    
-    with Image.open(os.path.join(PATH, "img/",os.listdir(app.config['UPLOAD_FOLDER'])[0])) as img:
+
+def rotateImage(deg):   
+    with Image.open(os.path.join(PATH, "img/" ,os.listdir(app.config['UPLOAD_FOLDER'])[0])) as img:
         #rotate image by degrees and update
         img = img.rotate(deg, Image.NEAREST,expand=1)
         img = img.save(os.path.join(PATH, "img/",os.listdir(app.config['UPLOAD_FOLDER'])[0]))
         updateEink(os.listdir(app.config['UPLOAD_FOLDER'])[0],ORIENTATION,ADJUST_AR)
 
+
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'],filename)
 
+# INITIALIZE THE BUTTONS
+# ----------------------------------------------------------------------------
 
-#run button checks on gpio    
-for pin in BUTTONS:
-        GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+
+log.info("[Init] GPIO")
+
+# Create settings for all the input pins, we want them to be inputs
+# with a pull-up and a falling edge detection.
+INPUT = gpiod.LineSettings(
+    direction=Direction.INPUT,
+    bias=Bias.PULL_UP,
+    edge_detection=Edge.FALLING
+)
+
+
+# Find the gpiochip device we need, we'll use
+# gpiodevice for this, since it knows the right device
+# for its supported platforms.
+chip = gpiodevice.find_chip_by_platform()
+
+# Build our config for each pin/line we want to use
+OFFSETS = [chip.line_offset_from_id(id) for id in BUTTONS]
+line_config = dict.fromkeys(OFFSETS, INPUT)
+
+# Request the lines, *whew*
+line_request = chip.request_lines(consumer="inky7-buttons", config=line_config)
+
+
+# "handle_button" will be called every time a button is pressed
+# It receives one argument: the associated gpiod event object.
+def handle_button(event):
+    index = OFFSETS.index(event.line_offset)
+    gpio_number = BUTTONS[index]
+    label = LABELS[index]
+    print(f"Button press detected on GPIO #{gpio_number} label: {label}")
+
+
+# Function to run the button monitoring loop in a separate thread
+def button_monitoring_loop():
+    log.info("[Init] Inside monitoring loop")
+    while True:
+        for event in line_request.read_edge_events():
+            handle_button(event)
+        time.sleep(0.01)  # Small sleep to reduce CPU usage
+
+
 if __name__ == '__main__':
-    app.secret_key = str(random.randint(100000,999999))
-    app.run(host="0.0.0.0",port=80)
+    try:
+        log.info("Upon webserver startup, initialize buttons.")
+        # GPIO.setmode(GPIO.BCM)
+        # GPIO.setup(BUTTONS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        # time.sleep(0.2)
+
+        # for pin in BUTTONS:
+        #     print(f"Trying to add event detect for pin {pin}")
+        #     GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+        #     time.sleep(0.1)
+
+        log.info("[Init] Inky")
+        inky_display = auto(ask_user=True, verbose=True)
+
+        log.info("[Config] Inky Border")
+        inky_display.set_border(inky_display.BLACK)
+
+        # Start the button monitoring loop in a separate thread
+        log.info("[Init] Button monitoring loop.")
+        button_thread = threading.Thread(target=button_monitoring_loop)
+        # Allow main thread to exit even if button thread is running
+        button_thread.daemon = True
+        button_thread.start()
+
+        log.info("[Init] Downloading image.")
+        download_file()
+
+        # Start the flask app
+        log.info("[Init] Flask app.")
+        app.secret_key = str(random.randint(100000, 999999))
+        app.run(host="0.0.0.0", port=80)
+    except Exception as e:
+        log.exception(e)
+    # finally:
+    #     GPIO.cleanup()
+    #     log.info("GPIO cleanup complete.")

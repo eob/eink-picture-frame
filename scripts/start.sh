@@ -2,7 +2,10 @@
 
 pid=$(lsof -i :80| awk '/python/ { pid=$2 } END { print pid }')
 currentDir=$(pwd)
+
+
 currentFolder=${PWD##*/} 
+
 
 # do a sudo check!
 if [ "$EUID" -ne 0 ]; then
@@ -15,6 +18,13 @@ if [ "$currentFolder" == "scripts" ]; then
   currentDir=$(pwd)
 fi
 
+
+source env/bin/activate
+
+echo "currentDir: $currentDir"
+echo "currentFolder: $currentFolder"
+echo "python is at: $(which python)"
+echo "python_path is: $PYTHONPATH"
 
 if [[ -z $pid ]]; then
   echo "No process found using port 80!"
@@ -30,4 +40,5 @@ fi
 
 echo "starting PiInk frame webserver!"
 
-sudo python $currentDir/src/webserver.py
+# We need to use the right python here so that  the sudo command doesn't use the wrong python outside of the venv
+sudo $(which python) $currentDir/src/webserver.py
